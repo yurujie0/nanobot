@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -66,20 +67,44 @@ class Nanobot:
         bus = MessageBus()
         defaults = config.agents.defaults
 
-        loop = AgentLoop(
-            bus=bus,
-            provider=provider,
-            workspace=config.workspace_path,
-            model=defaults.model,
-            max_iterations=defaults.max_tool_iterations,
-            context_window_tokens=defaults.context_window_tokens,
-            web_search_config=config.tools.web.search,
-            web_proxy=config.tools.web.proxy or None,
-            exec_config=config.tools.exec,
-            restrict_to_workspace=config.tools.restrict_to_workspace,
-            mcp_servers=config.tools.mcp_servers,
-            timezone=defaults.timezone,
-        )
+        # Check if enhanced agent is enabled via environment variable
+        enable_enhanced = os.environ.get("NANOBOT_ENABLE_CONTEXT_CONSOLIDATION", "").lower() in ("true", "1", "yes")
+
+        if enable_enhanced:
+            from nanobot.agent.enhanced_loop import EnhancedAgentLoop
+            consolidation_model = os.environ.get("NANOBOT_CONSOLIDATION_MODEL")
+
+            loop = EnhancedAgentLoop(
+                bus=bus,
+                provider=provider,
+                workspace=config.workspace_path,
+                model=defaults.model,
+                max_iterations=defaults.max_tool_iterations,
+                context_window_tokens=defaults.context_window_tokens,
+                web_search_config=config.tools.web.search,
+                web_proxy=config.tools.web.proxy or None,
+                exec_config=config.tools.exec,
+                restrict_to_workspace=config.tools.restrict_to_workspace,
+                mcp_servers=config.tools.mcp_servers,
+                timezone=defaults.timezone,
+                enable_context_consolidation=True,
+                consolidation_model=consolidation_model,
+            )
+        else:
+            loop = AgentLoop(
+                bus=bus,
+                provider=provider,
+                workspace=config.workspace_path,
+                model=defaults.model,
+                max_iterations=defaults.max_tool_iterations,
+                context_window_tokens=defaults.context_window_tokens,
+                web_search_config=config.tools.web.search,
+                web_proxy=config.tools.web.proxy or None,
+                exec_config=config.tools.exec,
+                restrict_to_workspace=config.tools.restrict_to_workspace,
+                mcp_servers=config.tools.mcp_servers,
+                timezone=defaults.timezone,
+            )
         return cls(loop)
 
     async def run(

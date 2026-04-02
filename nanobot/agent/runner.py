@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from typing import Any
+
+from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.agent.tools.registry import ToolRegistry
@@ -84,12 +87,28 @@ class AgentRunner:
                 async def _stream(delta: str) -> None:
                     await hook.on_stream(context, delta)
 
+                logger.debug("Sending request to LLM (streaming): model={}, messages={}, tools={}",
+                             spec.model,
+                             json.dumps(messages, ensure_ascii=False, default=str),
+                             json.dumps(spec.tools.get_definitions(), ensure_ascii=False, default=str))
+
                 response = await self.provider.chat_stream_with_retry(
                     **kwargs,
                     on_content_delta=_stream,
                 )
             else:
+                logger.debug("Sending request to LLM: model={}, messages={}, tools={}",
+                             spec.model,
+                             json.dumps(messages, ensure_ascii=False, default=str),
+                             json.dumps(spec.tools.get_definitions(), ensure_ascii=False, default=str))
+
                 response = await self.provider.chat_with_retry(**kwargs)
+
+            logger.debug("Received LLM response: content={}, tool_calls={}, finish_reason={}, usage={}",
+                         response.content,
+                         [tc.name for tc in response.tool_calls] if response.tool_calls else [],
+                         response.finish_reason,
+                         response.usage)
 
             raw_usage = response.usage or {}
             usage = {
@@ -126,6 +145,9 @@ class AgentRunner:
                     await hook.after_iteration(context)
                     break
                 for tool_call, result in zip(response.tool_calls, results):
+                    logger.debug("Tool result: tool={}, result={}",
+                                 tool_call.name,
+                                 str(result)[:500] if result else "(empty)")
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,

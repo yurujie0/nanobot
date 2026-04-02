@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import hashlib
 import os
 import secrets
@@ -11,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 import json_repair
+from loguru import logger
 from openai import AsyncOpenAI
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
@@ -552,8 +554,11 @@ class OpenAICompatProvider(LLMProvider):
             messages, tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
         )
+        logger.debug("[OpenAI-compat] Request BODY: {}", json.dumps(kwargs, ensure_ascii=False, default=str))
         try:
-            return self._parse(await self._client.chat.completions.create(**kwargs))
+            raw_response = await self._client.chat.completions.create(**kwargs)
+            logger.debug("[OpenAI-compat] Response BODY: {}", json.dumps(raw_response.model_dump() if hasattr(raw_response, 'model_dump') else str(raw_response), ensure_ascii=False, default=str))
+            return self._parse(raw_response)
         except Exception as e:
             return self._handle_error(e)
 

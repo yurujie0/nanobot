@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import secrets
 import string
@@ -406,8 +407,10 @@ class AnthropicProvider(LLMProvider):
             messages, tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
         )
+        logger.debug("[Anthropic] Request BODY: {}", json.dumps(kwargs, ensure_ascii=False, default=str))
         try:
             response = await self._client.messages.create(**kwargs)
+            logger.debug("[Anthropic] Response BODY: {}", json.dumps(response.model_dump() if hasattr(response, 'model_dump') else str(response), ensure_ascii=False, default=str))
             return self._parse_response(response)
         except Exception as e:
             return LLMResponse(content=f"Error calling LLM: {e}", finish_reason="error")

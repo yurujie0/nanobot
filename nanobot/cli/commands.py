@@ -49,6 +49,82 @@ console = Console()
 EXIT_COMMANDS = {"exit", "quit", "/exit", "/quit", ":q"}
 
 # ---------------------------------------------------------------------------
+# Enhanced Agent Support
+# ---------------------------------------------------------------------------
+
+def _create_agent_loop(
+    bus: Any,
+    provider: Any,
+    workspace: Path,
+    model: str,
+    max_iterations: int,
+    context_window_tokens: int,
+    web_search_config: Any,
+    web_proxy: str | None,
+    exec_config: Any,
+    restrict_to_workspace: bool,
+    session_manager: Any,
+    mcp_servers: dict | None,
+    channels_config: Any,
+    timezone: str | None,
+    cron_service: Any = None,
+) -> Any:
+    """Create AgentLoop, optionally using EnhancedAgentLoop.n
+
+    Supports NANOBOT_ENABLE_CONTEXT_CONSOLIDATION and NANOBOT_CONSOLIDATION_MODEL
+    environment variables.
+    """
+    enable_enhanced = os.environ.get("NANOBOT_ENABLE_CONTEXT_CONSOLIDATION", "").lower() in ("true", "1", "yes")
+
+    if enable_enhanced:
+        from nanobot.agent.enhanced_loop import EnhancedAgentLoop
+        consolidation_model = os.environ.get("NANOBOT_CONSOLIDATION_MODEL")
+
+        if consolidation_model:
+            console.print(f"[dim]Using enhanced agent with consolidation model: {consolidation_model}[/dim]")
+        else:
+            console.print("[dim]Using enhanced agent with default model for consolidation[/dim]")
+
+        return EnhancedAgentLoop(
+            bus=bus,
+            provider=provider,
+            workspace=workspace,
+            model=model,
+            max_iterations=max_iterations,
+            context_window_tokens=context_window_tokens,
+            web_search_config=web_search_config,
+            web_proxy=web_proxy,
+            exec_config=exec_config,
+            cron_service=cron_service,
+            restrict_to_workspace=restrict_to_workspace,
+            session_manager=session_manager,
+            mcp_servers=mcp_servers,
+            channels_config=channels_config,
+            timezone=timezone,
+            enable_context_consolidation=True,
+            consolidation_model=consolidation_model,
+        )
+    else:
+        from nanobot.agent.loop import AgentLoop
+        return AgentLoop(
+            bus=bus,
+            provider=provider,
+            workspace=workspace,
+            model=model,
+            max_iterations=max_iterations,
+            context_window_tokens=context_window_tokens,
+            web_search_config=web_search_config,
+            web_proxy=web_proxy,
+            exec_config=exec_config,
+            cron_service=cron_service,
+            restrict_to_workspace=restrict_to_workspace,
+            session_manager=session_manager,
+            mcp_servers=mcp_servers,
+            channels_config=channels_config,
+            timezone=timezone,
+        )
+
+# ---------------------------------------------------------------------------
 # CLI input: prompt_toolkit for editing, paste, history, and display
 # ---------------------------------------------------------------------------
 
@@ -535,7 +611,7 @@ def serve(
     bus = MessageBus()
     provider = _make_provider(runtime_config)
     session_manager = SessionManager(runtime_config.workspace_path)
-    agent_loop = AgentLoop(
+    agent_loop = _create_agent_loop(
         bus=bus,
         provider=provider,
         workspace=runtime_config.workspace_path,
@@ -622,7 +698,7 @@ def gateway(
     cron = CronService(cron_store_path)
 
     # Create agent with cron service
-    agent = AgentLoop(
+    agent = _create_agent_loop(
         bus=bus,
         provider=provider,
         workspace=config.workspace_path,
@@ -632,7 +708,6 @@ def gateway(
         web_search_config=config.tools.web.search,
         web_proxy=config.tools.web.proxy or None,
         exec_config=config.tools.exec,
-        cron_service=cron,
         restrict_to_workspace=config.tools.restrict_to_workspace,
         session_manager=session_manager,
         mcp_servers=config.tools.mcp_servers,
@@ -828,7 +903,7 @@ def agent(
     else:
         logger.disable("nanobot")
 
-    agent_loop = AgentLoop(
+    agent_loop = _create_agent_loop(
         bus=bus,
         provider=provider,
         workspace=config.workspace_path,
@@ -840,6 +915,7 @@ def agent(
         exec_config=config.tools.exec,
         cron_service=cron,
         restrict_to_workspace=config.tools.restrict_to_workspace,
+        session_manager=None,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         timezone=config.agents.defaults.timezone,
